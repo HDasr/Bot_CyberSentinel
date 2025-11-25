@@ -1,0 +1,7 @@
+flask
+requests
+beautifulsoup4
+feedparser
+python-telegram-bot
+pytz
+tzlocal<3.0
