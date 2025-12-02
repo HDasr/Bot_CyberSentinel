@@ -47,6 +47,7 @@ Ikuti langkah ini untuk menjalankan bot di lokal atau server (VPS/Render).
 ```bash
 git clone [https://github.com/ranseraya/Bot_CyberSentinel.git](https://github.com/ranseraya/Bot_CyberSentinel.git)
 cd Bot_CyberSentinel
+```
 
 ### 2\. Install Dependencies
 
@@ -107,17 +108,17 @@ Proyek ini sudah dikonfigurasi agar kompatibel dengan layanan Cloud seperti Rend
 
 ```text
 CyberSentinel/
-├── services/               # Modul Pengambil Data (Fetcher)
+├── services/               # Modul Pengambil Data
 │   ├── cisa_service.py     # API CISA KEV
 │   ├── nvd_service.py      # API NVD NIST
 │   ├── scraper_service.py  # Web Scraper (TheHackerNews)
 │   └── rss_service.py      # RSS Feed Reader (Backup)
 ├── utils/                  
 │   └── formatter.py        # Normalisasi Data & Format HTML Telegram
-├── main.py                 # Otak Utama (Scheduler & Logic Prioritas)
+├── main.py                 # Program Utama (Scheduler & Logic Prioritas)
 ├── config.py               # Loader Konfigurasi (.env)
-├── .env                    # File Rahasia (Token & API Key)
-└── requirements.txt        # Daftar Pustaka
+├── .env                    # File secret (Token & API Key)
+└── requirements.txt        # Daftar library yang perlu diinstall
 ```
 
 -----
@@ -130,6 +131,3 @@ Aplikasi ini dikembangkan sebagai bagian dari penelitian akademis. Penggunaan da
 
 **Developed by Ayala**
 Mahasiswa Informatika - UPN Veteran Jawa Timur
-
-```
-```
