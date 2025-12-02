@@ -1,8 +1,7 @@
-````markdown
 # 🛡️ Cyber Threat Sentinel (EWS Chatbot)
 
 ![Cyber Threat Sentinel Demo](image_d016bf.jpeg)
-s
+
 **Cyber Threat Sentinel** adalah sistem peringatan dini (*Early Warning System*) berbasis Bot Telegram yang dirancang untuk memantau, mengagregasi, dan memprioritaskan informasi kerentanan keamanan siber secara *real-time*.
 
 Proyek ini mengimplementasikan algoritma **Agregasi Multi-Sumber** dan **Logika Prioritas** untuk menyaring *Information Overload* bagi administrator jaringan, berfokus pada kerentanan yang sedang aktif dieksploitasi (*Known Exploited Vulnerabilities*).
@@ -48,7 +47,6 @@ Ikuti langkah ini untuk menjalankan bot di lokal atau server (VPS/Render).
 ```bash
 git clone [https://github.com/ranseraya/Bot_CyberSentinel.git](https://github.com/ranseraya/Bot_CyberSentinel.git)
 cd Bot_CyberSentinel
-````
 
 ### 2\. Install Dependencies
 
