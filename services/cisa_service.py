@@ -9,7 +9,7 @@ def get_cisa_alerts():
             return []
 
         data = r.json()
-        # Return Raw List
+        
         return data.get("vulnerabilities", [])
     except Exception:
         return []

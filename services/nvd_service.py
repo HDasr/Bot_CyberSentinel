@@ -1,15 +1,27 @@
 import requests
-
-NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0?resultsPerPage=5"
+import os
+from config import NVD_API_URL, NVD_API
 
 def get_latest_nvd():
     try:
-        response = requests.get(NVD_URL, timeout=10)
+        headers = {
+            "apiKey": NVD_API,
+            "User-Agent": "CyberSentinel-Bot/1.0"
+        }
+        
+        params = {
+            "resultsPerPage": 20,
+            "startIndex": 0
+        }
+
+        response = requests.get(NVD_API_URL, headers=headers, params=params, timeout=20)
+        
         if response.status_code != 200:
+            print(f"NVD Error: {response.status_code}")
             return []
         
         data = response.json()
-        # Return Raw List, jangan diproses di sini
         return data.get("vulnerabilities", []) 
-    except Exception:
+    except Exception as e:
+        print(f"NVD Exception: {e}")
         return []

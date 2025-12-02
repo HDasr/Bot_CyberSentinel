@@ -2,6 +2,7 @@ import asyncio
 import logging
 import threading
 from flask import Flask, jsonify
+import os
 
 from config import TELEGRAM_TOKEN, CHAT_ID
 
@@ -9,7 +10,6 @@ from telegram import BotCommand
 from telegram.ext import Application, CommandHandler
 
 from services.nvd_service import get_latest_nvd
-from services.circl_service import get_latest_circl
 from services.cisa_service import get_cisa_alerts
 from services.rss_service import get_rss_threats
 from services.scraper_service import get_scraped_threats
@@ -22,173 +22,217 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 
 
-# -------------------------------------------------------------
-# FETCH ALL SOURCES (SYNC)
-# -------------------------------------------------------------
-def fetch_all_sources_sync():
-    sources = [
-        ("NVD", get_latest_nvd),
-        ("CIRCL", get_latest_circl),
-        ("CISA", get_cisa_alerts),
-        ("RSS", get_rss_threats),
-        ("Scraper", get_scraped_threats),
-    ]
+def fetch_aggregated_data():
+    aggregated = {
+        "NVD": [],
+        "CISA": [],
+        "NEWS": []
+    }
 
-    for name, fn in sources:
-        try:
-            data = fn()
-            if data:
-                return name, data
-        except Exception as e:
-            log.error(f"{name} error: {e}")
+    # Fetching NVD
+    try:
+        raw_nvd = get_latest_nvd()
+        if raw_nvd:
+            clean_nvd = standardize_data("NVD", raw_nvd)
+            aggregated["NVD"] = clean_nvd[:20]
+    except Exception as e:
+        log.error(f"NVD Error: {e}")
 
-    return None, []
+    # Fetching CISA
+    try:
+        raw_cisa = get_cisa_alerts()
+        if raw_cisa:
+            clean_cisa = standardize_data("CISA", raw_cisa)
+            aggregated["CISA"] = clean_cisa[:20]
+    except Exception as e:
+        log.error(f"CISA Error: {e}")
+
+    # Fetching Scraper
+    try:
+        raw_news = get_scraped_threats() 
+        source_name = "Scraper"
+        
+        if not raw_news:
+            raw_news = get_rss_threats()
+            source_name = "RSS"
+
+        if raw_news:
+            clean_news = standardize_data(source_name, raw_news)
+            aggregated["NEWS"] = clean_news[:20]
+    except Exception as e:
+        log.error(f"News Error: {e}")
+
+    return aggregated
 
 
-# -------------------------------------------------------------
-# TELEGRAM COMMANDS
-# -------------------------------------------------------------
+def merge_and_prioritize(data_dict, limit):
+    final_list = []
+    
+    quota = int(limit / 3) 
+    
+    cisa_data = data_dict.get("CISA", [])
+    final_list.extend(cisa_data[:quota])
+    
+    nvd_data = data_dict.get("NVD", [])
+    if nvd_data:
+        sorted_nvd = sorted(
+            nvd_data, 
+            key=lambda x: float(x.get("cvss") or 0), 
+            reverse=True
+        )
+        final_list.extend(sorted_nvd[:quota])
+        
+    news_data = data_dict.get("NEWS", [])
+    final_list.extend(news_data[:quota])
+    
+    current_count = len(final_list)
+    if current_count < limit:
+        needed = limit - current_count
+        
+        if len(cisa_data) > quota:
+            final_list.extend(cisa_data[quota : quota + needed])
+            
+        current_count = len(final_list)
+        needed = limit - current_count
+        
+        if needed > 0 and len(nvd_data) > quota:
+            final_list.extend(sorted_nvd[quota : quota + needed])
+            
+        current_count = len(final_list)
+        needed = limit - current_count
+        if needed > 0 and len(news_data) > quota:
+            final_list.extend(news_data[quota : quota + needed])
+
+    return final_list[:limit]
+
 async def cmd_start(update, context):
     welcome_text = (
         "🔐 <b>Cyber Threat Sentinel Activated</b>\n\n"
         "Your real-time cybersecurity assistant is now online.\n"
         "Use the commands below to retrieve the latest threat intelligence:\n\n"
         "📌 <b>Available Commands</b>\n"
-        "• /today — Get today’s vulnerability summary (up to 10 CVEs)\n"
-        "• /weekly — Top 5 highest-risk CVEs this week\n"
-        "• /now — Fetch the most recent threats in real-time\n\n"
-        "🛡️ The bot also sends automatic hourly updates to keep you informed.\n\n"
-        "If you need additional features, feel free to request them anytime."
+        "• /today — Get today’s summary (Top 15 Most Important)\n"
+        "• /weekly — Weekly highlights (Top 10 High Risk)\n"
+        "• /now — Quick update (Top 5 Latest)\n\n"
+        "🛡️ The bot also sends automatic hourly updates to keep you informed."
     )
-
     await update.message.reply_text(welcome_text, parse_mode="HTML")
 
 
-
 async def cmd_today(update, context):
-    src, raw_data = fetch_all_sources_sync()
-    if not raw_data:
-        await update.message.reply_text("No data available.")
+    await update.message.reply_text("🔄 Fetching top 15 threats for today...", parse_mode="HTML")
+    
+    data_dict = fetch_aggregated_data()
+    top_15 = merge_and_prioritize(data_dict, limit=15)
+
+    if not top_15:
+        await update.message.reply_text("No data available at the moment.")
         return
 
-    # 1. Standarisasi Data dulu!
-    clean_data = standardize_data(src, raw_data)
-
-    # 2. Baru di-slice dan diformat
-    msg = format_vulnerabilities(clean_data[:10], f"Daily Threat Summary ({src})")
-    await update.message.reply_text(msg, parse_mode="HTML")
+    msg_list = format_vulnerabilities(top_15, "📅 Today's Intelligence (Top 15)")
+    
+    for part in msg_list:
+        await update.message.reply_text(part, parse_mode="HTML")
 
 
 async def cmd_weekly(update, context):
-    src, raw_data = fetch_all_sources_sync()
-    if not raw_data:
+    await update.message.reply_text("🔄 Fetching top 10 weekly highlights...", parse_mode="HTML")
+    
+    data_dict = fetch_aggregated_data()
+    top_10 = merge_and_prioritize(data_dict, limit=10)
+
+    if not top_10:
         await update.message.reply_text("No data available.")
         return
 
-    # 1. Standarisasi Data
-    clean_data = standardize_data(src, raw_data)
-
-    # 2. Sorting Data (Sekarang aman karena kuncinya sudah pasti 'cvss')
-    # Mengubah None menjadi 0 agar tidak error saat sort
-    sorted_data = sorted(
-        clean_data, 
-        key=lambda x: float(x.get("cvss") or 0), 
-        reverse=True
-    )
-
-    msg = format_vulnerabilities(sorted_data[:5], f"Top 5 Weekly Threats ({src})")
-    await update.message.reply_text(msg, parse_mode="HTML")
+    msg_list = format_vulnerabilities(top_10, "🗓️ Weekly Highlights (Top 10)")
+    
+    for part in msg_list:
+        await update.message.reply_text(part, parse_mode="HTML")
 
 
 async def cmd_now(update, context):
-    src, raw_data = fetch_all_sources_sync()
-    if not raw_data:
+    data_dict = fetch_aggregated_data()
+    top_5 = merge_and_prioritize(data_dict, limit=5)
+
+    if not top_5:
         await update.message.reply_text("No data available.")
         return
 
-    clean_data = standardize_data(src, raw_data)
-    msg = format_vulnerabilities(clean_data[:5], f"Realtime Update ({src})")
-    await update.message.reply_text(msg, parse_mode="HTML")
+    msg_list = format_vulnerabilities(top_5, "⚡ Real-time Threats (Top 5)")
+    
+    for part in msg_list:
+        await update.message.reply_text(part, parse_mode="HTML")
 
 
-# -------------------------------------------------------------
-# BACKGROUND SCHEDULER (runs every hour)
-# -------------------------------------------------------------
 async def scheduler(app_obj):
-    await asyncio.sleep(5)
+    await asyncio.sleep(10) 
+    
     while True:
-        log.info("Scheduler running...")
-        src, raw_data = fetch_all_sources_sync() # Ambil data mentah
+        log.info("🕒 Scheduler Running: Fetching data Aggregator...")
+        
+        data = fetch_aggregated_data()
+        
+        if data["NEWS"]:
+            msg_list = format_vulnerabilities(data["NEWS"][:5], "📰 Report Cyber News")
+            await send_to_group(app_obj, msg_list)
 
-        if raw_data:
-            # Standarisasi sebelum kirim
-            clean_data = standardize_data(src, raw_data) 
+        if data["CISA"]:
+            msg_list = format_vulnerabilities(data["CISA"][:5], "🚨 CISA Known Exploited")
+            await send_to_group(app_obj, msg_list)
             
-            msg = format_vulnerabilities(clean_data[:5], f"Auto Update ({src})")
-            try:
-                # Pastikan CHAT_ID ada
-                if CHAT_ID: 
-                    await app_obj.bot.send_message(
-                        chat_id=CHAT_ID,
-                        text=msg,
-                        parse_mode="HTML"
-                    )
-                else:
-                    log.warning("CHAT_ID not set, skipping message.")
-            except Exception as e:
-                log.error(f"Scheduler send error: {e}")
+        if data["NVD"]:
+            sorted_nvd = sorted(data["NVD"], key=lambda x: float(x.get("cvss") or 0), reverse=True)
+            msg_list = format_vulnerabilities(sorted_nvd[:5], "🛠️ NVD High Risk Update")
+            await send_to_group(app_obj, msg_list)
 
-        await asyncio.sleep(3600)
+        log.info("✅ Report sent. Next report in 6 hours.")
+        await asyncio.sleep(21600) # 6 Hours
+
+async def send_to_group(app_obj, msg_input):
+    if CHAT_ID:
+        try:
+            if isinstance(msg_input, list):
+                for part in msg_input:
+                    await app_obj.bot.send_message(chat_id=CHAT_ID, text=part, parse_mode="HTML")
+                    await asyncio.sleep(1)
+            else:
+                await app_obj.bot.send_message(chat_id=CHAT_ID, text=msg_input, parse_mode="HTML")
+                
+        except Exception as e:
+            log.error(f"Gagal kirim ke grup: {e}")
 
 
-# -------------------------------------------------------------
-# POST INIT (important)
-# -------------------------------------------------------------
 async def post_init(app_obj):
-    """
-    This function is executed AFTER the application event loop is alive.
-    Perfect place to start background tasks and set bot commands.
-    """
-    # Create background hourly scheduler
     app_obj.create_task(scheduler(app_obj))
-    log.info("Background scheduler started.")
-
-    # Register bot command menu
+    
     commands = [
         BotCommand("start", "Activate the bot"),
-        BotCommand("today", "Get today's threat summary"),
-        BotCommand("weekly", "Top 5 highest CVSS this week"),
-        BotCommand("now", "Fetch latest threats right now"),
+        BotCommand("today", "Top 15 Threats"),
+        BotCommand("weekly", "Top 10 Highlights"),
+        BotCommand("now", "Top 5 Latest"),
     ]
     await app_obj.bot.set_my_commands(commands)
-    log.info("Bot command menu registered.")
+    log.info("Bot Ready.")
 
 
-# -------------------------------------------------------------
-# FLASK SERVER
-# -------------------------------------------------------------
 @app.route("/fetch-now")
-def fetch_now():
-    src, raw_data = fetch_all_sources_sync()
-    clean_data = standardize_data(src, raw_data) # Standarisasi juga buat API
+def fetch_now_api():
+    data = fetch_aggregated_data()
+    prioritized = merge_and_prioritize(data, 100)
     return jsonify({
-        "source": src,
-        "total": len(clean_data),
-        "sample": clean_data[:5]
+        "total_items": len(prioritized),
+        "data": prioritized
     })
 
 def run_flask():
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
 
 
-# -------------------------------------------------------------
-# MAIN
-# -------------------------------------------------------------
 def main():
-    # Run Flask in background
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # Build bot
     bot_app = (
         Application.builder()
         .token(TELEGRAM_TOKEN)
@@ -196,13 +240,11 @@ def main():
         .build()
     )
 
-    # Commands
     bot_app.add_handler(CommandHandler("start", cmd_start))
     bot_app.add_handler(CommandHandler("today", cmd_today))
     bot_app.add_handler(CommandHandler("weekly", cmd_weekly))
     bot_app.add_handler(CommandHandler("now", cmd_now))
 
-    # Run bot
     bot_app.run_polling()
 
 

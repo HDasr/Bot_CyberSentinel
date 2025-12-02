@@ -1,14 +1,15 @@
 import logging
 
-# ==========================================
-# 1. STRING BUILDER (Output Telegram)
-# ==========================================
-def format_vulnerabilities(data: list, tag="Update") -> str:
+def format_vulnerabilities(data: list, tag="Update") -> list:
     if not data:
-        return "No data available."
+        return ["No data available."]
 
-    msg = f"🔐 <b>{tag}</b>\n"
-    msg += "Latest cybersecurity threats detected:\n\n"
+    messages = []
+    
+    header = f"🔐 <b>{tag}</b>\nLatest cybersecurity threats detected:\n\n"
+    current_msg = header
+    
+    MAX_LENGTH = 4000 
 
     for item in data:
         cve     = item.get("cve") or "N/A"
@@ -18,49 +19,47 @@ def format_vulnerabilities(data: list, tag="Update") -> str:
         link    = item.get("link")
         source  = item.get("source", "Unknown")
 
-        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        item_str = "━━━━━━━━━━━━━━━━━━━━━━\n"
         
-        # Header Logic
-        if cve != "N/A" and cve != "Unknown":
-            msg += f"📌 <b>{cve}</b>"
-            # Tampilkan judul hanya jika beda dengan CVE ID
-            if title and title != cve and "Unknown" not in title:
-                msg += f" — {title}"
-            msg += "\n"
+        if cve != "N/A" and cve != "Unknown" and cve is not None:
+            item_str += f"📌 <b>{cve}</b>"
+            if title and title != cve: 
+                item_str += f" — {title}"
+            item_str += "\n"
         else:
-            msg += f"📢 <b>{title}</b>\n"
+            item_str += f"📢 <b>{title}</b>\n"
 
-        # Severity / CVSS Logic
         if cvss:
             try:
                 score = float(cvss)
                 emoji = "🟢" if score < 4.0 else "🟡" if score < 7.0 else "🔴"
-                msg += f"⚠️ CVSS: <b>{score}</b> {emoji}\n"
+                item_str += f"⚠️ CVSS: <b>{score}</b> {emoji}\n"
             except:
-                # Jika CVSS berupa teks (misal: "Important")
-                msg += f"⚠️ Severity: <b>{cvss}</b>\n"
+                item_str += f"⚠️ Severity: <b>{cvss}</b>\n"
         
-        msg += f"📂 Source: {source}\n"
+        item_str += f"📂 Source: {source}\n"
         
-        # Description Limiter
-        desc_str = str(desc).replace("<", "&lt;").replace(">", "&gt;") # Escape HTML tags
+        desc_str = str(desc).replace("<", "&lt;").replace(">", "&gt;")
         if len(desc_str) > 300:
             desc_str = desc_str[:300] + "..."
-        msg += f"📝 <i>{desc_str}</i>\n"
+        item_str += f"📝 <i>{desc_str}</i>\n"
 
-        # Link
         if link and str(link).startswith("http"):
-            msg += f"🔗 <a href='{link}'>Read More</a>\n"
+            item_str += f"🔗 <a href='{link}'>Read More</a>\n"
         
-        msg += "\n"
+        item_str += "\n"
 
-    msg += "━━━━━━━━━━━━━━━━━━━━━━"
-    return msg
+        if len(current_msg) + len(item_str) > MAX_LENGTH:
+            messages.append(current_msg)
+            current_msg = f"🔐 <b>{tag} (Continued...)</b>\n\n" + item_str
+        else:
+            current_msg += item_str
 
+    if current_msg:
+        messages.append(current_msg + "━━━━━━━━━━━━━━━━━━━━━━")
 
-# ==========================================
-# 2. DATA NORMALIZERS (Sesuai JSON Anda)
-# ==========================================
+    return messages
+
 
 def standardize_data(source_name: str, raw_data) -> list:
     if not raw_data:
@@ -68,8 +67,6 @@ def standardize_data(source_name: str, raw_data) -> list:
 
     if source_name == "NVD":
         return normalize_nvd(raw_data)
-    elif source_name == "CIRCL":
-        return normalize_circl(raw_data)
     elif source_name == "CISA":
         return normalize_cisa(raw_data)
     elif source_name == "RSS":
@@ -81,37 +78,22 @@ def standardize_data(source_name: str, raw_data) -> list:
 
 
 def normalize_nvd(data) -> list:
-    """
-    Handling JSON NVD v2.0
-    Path: item -> cve -> metrics -> cvssMetricV2 -> [0] -> cvssData -> baseScore
-    """
     results = []
-    # Data NVD dibungkus dalam list raw
     for entry in data:
         cve_obj = entry.get("cve", {})
-        
         cve_id = cve_obj.get("id", "Unknown")
-        
-        # Description (Ambil bahasa inggris)
         descriptions = cve_obj.get("descriptions", [])
         desc_text = "No description."
         if descriptions:
             desc_text = next((d["value"] for d in descriptions if d["lang"] == "en"), descriptions[0].get("value"))
-
-        # CVSS Logic (Cek V3.1, V3.0, lalu V2)
         metrics = cve_obj.get("metrics", {})
         cvss_score = None
-        
         for ver in ["cvssMetricV31", "cvssMetricV30", "cvssMetricV2"]:
             if ver in metrics and metrics[ver]:
-                # Struktur JSON NVD: metrics -> cvssMetricV2 -> List -> Dict -> cvssData -> baseScore
                 cvss_data = metrics[ver][0].get("cvssData", {})
                 cvss_score = cvss_data.get("baseScore")
                 break
-
-        # Link
         link = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
-
         results.append({
             "source": "NVD",
             "cve": cve_id,
@@ -122,66 +104,7 @@ def normalize_nvd(data) -> list:
         })
     return results
 
-
-def normalize_circl(data) -> list:
-    """
-    Handling JSON CIRCL (Format RedHat Advisory berdasarkan log Anda)
-    Path: item -> document -> tracking -> id
-    """
-    results = []
-    
-    for item in data:
-        # Cek apakah formatnya 'document' (seperti log JSON Anda)
-        doc = item.get("document", {})
-        
-        if doc:
-            # Format RedHat / CSAF
-            cve_id = doc.get("tracking", {}).get("id", "Unknown")
-            title = doc.get("title", "No Title")
-            
-            # Severity (bukan angka, tapi teks "Important", dll)
-            severity = doc.get("aggregate_severity", {}).get("text")
-            
-            # Description (Ambil dari notes summary)
-            notes = doc.get("notes", [])
-            desc = "No description."
-            for note in notes:
-                if note.get("category") == "summary" or note.get("category") == "general":
-                    desc = note.get("text")
-                    break
-            
-            # Link
-            refs = doc.get("references", [])
-            link = refs[0].get("url") if refs else None
-            
-            results.append({
-                "source": "CIRCL",
-                "cve": cve_id,
-                "title": title,
-                "description": desc,
-                "cvss": severity, # Masukkan teks severity ke kolom CVSS
-                "link": link
-            })
-        else:
-            # Fallback ke format CIRCL standar (jika API berubah lagi)
-            cve_id = item.get("id", "Unknown")
-            results.append({
-                "source": "CIRCL",
-                "cve": cve_id,
-                "title": item.get("summary", ""),
-                "description": item.get("summary", ""),
-                "cvss": item.get("cvss"),
-                "link": f"https://cve.circl.lu/api/cve/{cve_id}"
-            })
-
-    return results
-
-
 def normalize_cisa(data) -> list:
-    """
-    Handling JSON CISA KEV
-    Structure: { 'cveID': '...', 'vulnerabilityName': '...', 'shortDescription': '...' }
-    """
     results = []
     for item in data:
         results.append({
@@ -189,11 +112,10 @@ def normalize_cisa(data) -> list:
             "cve": item.get("cveID"),
             "title": item.get("vulnerabilityName"),
             "description": item.get("shortDescription"),
-            "cvss": None, # CISA KEV tidak menyediakan skor CVSS di feed ini
+            "cvss": "CRITICAL",
             "link": f"https://nvd.nist.gov/vuln/detail/{item.get('cveID')}"
         })
     return results
-
 
 def normalize_rss(data) -> list:
     results = []
@@ -207,7 +129,6 @@ def normalize_rss(data) -> list:
             "link": item.get("link")
         })
     return results
-
 
 def normalize_scraper(data) -> list:
     results = []

@@ -1,166 +1,132 @@
-Tentu, ini adalah file **README.md** yang profesional dan lengkap untuk proyek **Cyber Threat Sentinel** Anda.
-
-File ini mencakup deskripsi proyek, cara instalasi, konfigurasi, daftar fitur, dan cara penggunaan. Sangat cocok untuk dokumentasi tugas kuliah atau portofolio GitHub Anda.
-
-Silakan simpan kode di bawah ini dengan nama `README.md`.
-
------
-
 ````markdown
-# 🛡️ Cyber Threat Sentinel Bot
+# 🛡️ Cyber Threat Sentinel (EWS Chatbot)
 
-**Cyber Threat Sentinel** adalah Bot Telegram berbasis Python yang berfungsi sebagai asisten intelijen keamanan siber (*Cyber Threat Intelligence*).
+![Cyber Threat Sentinel Demo](image_d016bf.jpeg)
+s
+**Cyber Threat Sentinel** adalah sistem peringatan dini (*Early Warning System*) berbasis Bot Telegram yang dirancang untuk memantau, mengagregasi, dan memprioritaskan informasi kerentanan keamanan siber secara *real-time*.
 
-Bot ini secara otomatis mengumpulkan, menormalisasi, dan mengirimkan notifikasi mengenai kerentanan terbaru (CVE), peringatan keamanan, dan berita peretasan dari berbagai sumber terpercaya secara *real-time*.
+Proyek ini mengimplementasikan algoritma **Agregasi Multi-Sumber** dan **Logika Prioritas** untuk menyaring *Information Overload* bagi administrator jaringan, berfokus pada kerentanan yang sedang aktif dieksploitasi (*Known Exploited Vulnerabilities*).
 
-## ✨ Fitur Utama
-
-Bot ini mengagregasi data dari 5 sumber berbeda:
-
-1.  **NVD (National Vulnerability Database):** Mengambil data CVE terbaru beserta skor CVSS.
-2.  **CISA (Known Exploited Vulnerabilities):** Peringatan tentang celah keamanan yang sedang aktif dieksploitasi.
-3.  **CIRCL (Computer Incident Response Center Luxembourg):** Laporan insiden dan advisory keamanan.
-4.  **RSS Feeds:** Berita terbaru dari *The Hacker News*, *BleepingComputer*, dan *ThreatPost*.
-5.  **Web Scraper:** Mengambil *headline* eksklusif langsung dari website *The Hacker News*.
-
-### 🤖 Kemampuan Bot
-* **Real-time Alerts:** Notifikasi otomatis setiap 1 jam (Scheduler).
-* **On-Demand Fetch:** Perintah manual untuk menarik data kapan saja.
-* **Smart Formatting:** Mengubah data JSON mentah yang rumit menjadi tampilan HTML yang rapi di Telegram.
-* **Flask API:** Menyediakan endpoint HTTP sederhana `/fetch-now` untuk integrasi eksternal.
+> **Judul Penelitian:** Rancang Bangun Sistem Peringatan Dini Known Exploited Vulnerabilities Secara Real-time Berbasis Bot Telegram Menggunakan Integrasi API NVD dan CISA.
 
 ---
 
-## 🛠️ Teknologi yang Digunakan
+## ✨ Fitur Unggulan
 
-* **Python 3.13**
-* **python-telegram-bot (v20+)** - Framework bot asinkron (`asyncio`).
-* **Flask** - Web server ringan.
-* **BeautifulSoup4** - Web scraping.
-* **Feedparser** - Parsing RSS.
-* **Requests** - HTTP Client.
+Sistem ini memiliki kemampuan cerdas untuk menormalisasi data dari sumber heterogen:
+
+1.  **Prioritization Engine:** Algoritma cerdas yang mengurutkan ancaman berdasarkan urgensi:
+    * 🚨 **CRITICAL:** CISA KEV (Kerentanan yang sedang diserang hacker).
+    * 🔥 **HIGH RISK:** NVD (Kerentanan dengan skor CVSS tertinggi).
+    * 📰 **INFO:** Berita siber terbaru.
+2.  **Multi-Source Integration:**
+    * **NVD (NIST):** Data teknis CVE & CVSS Score.
+    * **CISA:** Daftar *Known Exploited Vulnerabilities*.
+    * **The Hacker News:** Berita terkini (via Web Scraper dengan fitur *Ad-Filtering*).
+    * **RSS Feed:** Cadangan otomatis (*Fail-over*) jika Scraper terkendala.
+3.  **Smart Formatting:** Mengubah data JSON/HTML mentah menjadi laporan yang mudah dibaca di Telegram.
+4.  **Scheduled Reporting:** Laporan intelijen otomatis dikirim ke grup setiap **6 jam** (Pagi, Siang, Sore, Malam).
 
 ---
 
-## 🚀 Instalasi & Persiapan
+## 🛠️ Teknologi
 
-Ikuti langkah-langkah ini untuk menjalankan bot di komputer lokal atau server Anda.
+* **Python 3.10+**
+* **python-telegram-bot** (Asyncio Framework)
+* **Flask** (Untuk menjaga bot tetap hidup di server cloud)
+* **BeautifulSoup4** (Web Scraping)
+* **Feedparser** (RSS Reader)
+* **SQLite** (Database Log - *Opsional*)
+
+---
+
+## 🚀 Instalasi & Konfigurasi
+
+Ikuti langkah ini untuk menjalankan bot di lokal atau server (VPS/Render).
 
 ### 1. Clone Repository
 ```bash
-git clone [https://github.com/username-anda/cyber-sentinel-bot.git](https://github.com/username-anda/cyber-sentinel-bot.git)
-cd cyber-sentinel-bot
+git clone [https://github.com/ranseraya/Bot_CyberSentinel.git](https://github.com/ranseraya/Bot_CyberSentinel.git)
+cd Bot_CyberSentinel
 ````
 
-### 2\. Siapkan Environment (Opsional tapi Disarankan)
+### 2\. Install Dependencies
 
-```bash
-python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Mac/Linux:
-source venv/bin/activate
-```
-
-### 3\. Install Dependencies
-
-Instal semua library yang dibutuhkan melalui `requirements.txt`.
-
-> **Catatan:** Project ini menggunakan `tzlocal<3.0` untuk menjaga kompatibilitas scheduler di Windows.
+Pastikan Python sudah terinstall, lalu jalankan:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4\. Konfigurasi Token
+### 3\. Konfigurasi Environment (PENTING 🔐)
 
-Buat folder bernama `config` dan di dalamnya buat file `config.py`:
+Demi keamanan, proyek ini menggunakan **Environment Variables**.
+Buat file bernama `.env` di dalam folder root proyek, lalu isi dengan data Anda:
 
-**Struktur Folder:**
-
-```text
-/
-├── config/
-│   ├── __init__.py   <-- File kosong (wajib ada)
-│   └── config.py     <-- Simpan token di sini
-├── services/
-├── main.py
-...
-```
-
-**Isi file `config/config.py`:**
-
-```python
-# Token didapat dari @BotFather
-TELEGRAM_TOKEN = "MASUKKAN_TOKEN_BOT_ANDA_DISINI"
-
-# ID Chat tujuan notifikasi otomatis (Personal ID / Group ID / Channel ID)
-# Didapat dari @userinfobot atau @GetIDs Bot
-CHAT_ID = "123456789" 
+```ini
+# .env file
+TELEGRAM_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+CHAT_ID=-100xxxxxxxxxx
+NVD_API=nvd-api-key
 ```
 
 -----
 
 ## ▶️ Cara Menjalankan
 
-### 1\. Jalankan Bot
+### Mode Lokal / Development
 
-Buka terminal di root folder proyek dan jalankan:
+Jalankan perintah berikut di terminal:
 
 ```bash
 python main.py
 ```
 
-Jika berhasil, akan muncul log: `INFO:root:Bot is polling...`
+Jika sukses, akan muncul log: `INFO:__main__:Bot Ready.`
 
-### 2\. Jalankan Diagnostik (Jika Error)
+### Deployment (Render/Railway)
 
-Jika data tidak muncul, gunakan script diagnostik untuk mengecek koneksi ke API eksternal:
+Proyek ini sudah dikonfigurasi agar kompatibel dengan layanan Cloud seperti Render.
 
-```bash
-python check_services.py
-```
+1.  Pastikan file `requirements.txt` ada.
+2.  Set **Start Command**: `python main.py`
+3.  Masukkan variabel `TELEGRAM_TOKEN`, `CHAT_ID`, dan `NVD_API` di menu **Environment Variables** pada dashboard cloud Anda.
 
 -----
 
-## 📱 Daftar Perintah Telegram
+## 📱 Daftar Perintah Bot
 
-Kirim perintah berikut ke bot Anda:
-
-| Perintah | Fungsi |
+| Command | Deskripsi |
 | :--- | :--- |
 | `/start` | Mengaktifkan bot dan menampilkan menu bantuan. |
-| `/now` | Mengambil 5 ancaman terbaru secara *real-time* dari semua sumber. |
-| `/today` | Menampilkan ringkasan ancaman harian (Top 10). |
-| `/weekly` | Menampilkan 5 ancaman dengan skor bahaya (CVSS) tertinggi minggu ini. |
+| `/today` | Menampilkan **Top 15** ancaman terpenting hari ini (Gabungan CISA, NVD, News). |
+| `/weekly` | Menampilkan **Top 10** highlight mingguan (Fokus High Risk). |
+| `/now` | Menampilkan **Top 5** update terbaru detik ini juga (*Real-time*). |
 
 -----
 
-## 📂 Struktur Proyek
+## 📂 Struktur Direktori
 
 ```text
-Bot_Cyber_Sentinel/
-├── config/                 # Konfigurasi rahasia
-│   ├── __init__.py
-│   └── config.py
-├── services/               # Logika pengambilan data API
-│   ├── cisa_service.py
-│   ├── circl_service.py
-│   ├── nvd_service.py
-│   ├── rss_service.py
-│   └── scraper_service.py
-├── utils/                  # Format tampilan pesan
-│   └── formatter.py
-├── main.py                 # Entry point (Bot & Flask)
-├── check_services.py       # Script testing/debugging
-└── requirements.txt        # Daftar pustaka Python
+CyberSentinel/
+├── services/               # Modul Pengambil Data (Fetcher)
+│   ├── cisa_service.py     # API CISA KEV
+│   ├── nvd_service.py      # API NVD NIST
+│   ├── scraper_service.py  # Web Scraper (TheHackerNews)
+│   └── rss_service.py      # RSS Feed Reader (Backup)
+├── utils/                  
+│   └── formatter.py        # Normalisasi Data & Format HTML Telegram
+├── main.py                 # Otak Utama (Scheduler & Logic Prioritas)
+├── config.py               # Loader Konfigurasi (.env)
+├── .env                    # File Rahasia (Token & API Key)
+└── requirements.txt        # Daftar Pustaka
 ```
 
 -----
 
 ## ⚠️ Disclaimer
 
-Proyek ini dibuat untuk tujuan edukasi dan penelitian akademis. Penggunaan web scraper harus mematuhi kebijakan `robots.txt` dari website target. Pengembang tidak bertanggung jawab atas penyalahgunaan informasi yang disajikan oleh bot ini.
+Aplikasi ini dikembangkan sebagai bagian dari penelitian akademis. Penggunaan data NVD dan CISA tunduk pada ketentuan layanan masing-masing instansi. Fitur *Web Scraping* telah disesuaikan agar mematuhi etika pengambilan data publik.
 
 -----
 
